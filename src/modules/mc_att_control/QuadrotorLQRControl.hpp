@@ -64,7 +64,7 @@ private:
        
       Matrix<float,12,1> _eq_point;
 
-      Matrix<float,4,12> _K;
+      Matrix<double,4,14> _K;
 
       Matrix<float,12,12> _P;
       
@@ -79,7 +79,7 @@ private:
 
       void writeStateOnFile(const char *filename, Matrix <float, 12, 1> vect, hrt_abstime t); 
 
-      Matrix <float, 4, 12> readMatrixK(const char *filename);
+      Matrix <double, 4, 14> readMatrixK(const char *filename);
 
       void writeInputOnFile(const char *filename, Matrix <float, 4, 1> vect, hrt_abstime t); 
 
@@ -87,9 +87,30 @@ private:
 
       Matrix <float, 12, 12> readMatrixP(const char *filename);
 
+      //--------------CHANGES FOR FEEDBACK LINEARIZATION----------------
+
+
+
       float _past_time;
 
-      float _init_time;
+      float _init_time; // This is effectively t0 for the system in terms of reference values for control, use ref(now-_init_time)
+
+      float eta; // Control input
+
+      float zeta; // Derivative of Control input
+
+      float u_bar1; // 2nd derivative of control input (and what we're treating as our control input)
+
+      void calc_z(const double in1[14], const double in2[5], double T_diffeomorphism [14]); // gets the Z state from the current full state (make sure to put the args in the expected order)
+
+      void calc_feedback_linearization(const double in1[14], const double in2[4], const double in3[5], double u_bar[4]); // Calculates u_bar  with arguments (state, v, parameters)
+
+      static double rt_powd_snf(double u0, double u1);
+
+      void get_reference_z(double t, double des_state[14], double des_accel[4]);
+
+
+      // -------------------------------------------------------------------
 
       Matrix<float,4,1> u_control;
       
