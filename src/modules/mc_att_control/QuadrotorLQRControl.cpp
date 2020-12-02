@@ -48,24 +48,26 @@ QuadrotorLQRControl::QuadrotorLQRControl()
     _auto_eq_point_flag = true;
 
     ofstream outfile1;
-     outfile1.open("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/control_input.txt", std::ios::out);
-     outfile1.close();
+    outfile1.open("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/control_input.txt", std::ios::out);
+    outfile1.close();
 
-        
-     ofstream outfile3;
-     outfile3.open("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/state.txt", std::ios::out);
-     outfile3.close();
+      
+    ofstream outfile3;
+    outfile3.open("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/state.txt", std::ios::out);
+    outfile3.close();
 
-     
-     ofstream outfile5;
-     outfile5.open("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/lyapunov.txt", std::ios::out);
-     outfile5.close();
+   
+    ofstream outfile5;
+    outfile5.open("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/lyapunov.txt", std::ios::out);
+    outfile5.close();
 
-ofstream outfile4;
-     outfile4.open("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/ekf.txt", std::ios::out);
-     outfile4.close();
+    ofstream outfile4;
+    outfile4.open("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/ekf.txt", std::ios::out);
+    outfile4.close();
 
      _past_time = hrt_absolute_time() * 1e-6;
+
+     _init_time = hrt_absolute_time() * 1e-6;
 
 }
 
@@ -97,7 +99,8 @@ Matrix <float, 4, 12>  QuadrotorLQRControl::readMatrixK(const char *filename)
 
 Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
 {
-       
+  // Reference Trajectory (in Z coordinates)
+  float 
      
      //static Matrix<float,4,1> u_control;
      static Matrix<float,4,1> u_control_norm;
