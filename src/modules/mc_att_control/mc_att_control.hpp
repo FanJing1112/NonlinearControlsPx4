@@ -61,6 +61,13 @@
 
 #include <AttitudeControl.hpp>
 
+/* ------- Raffaele --------------------------------- */
+#include "QuadrotorLQRControl.hpp"
+//#include "Observer.hpp"
+#include <uORB/topics/experiment_mode.h>
+#include <uORB/topics/vehicle_local_position.h>
+/* -------------------------------------------------- */
+
 /**
  * Multicopter attitude control app start / stop handling function
  */
@@ -119,6 +126,12 @@ private:
 	void		publish_rates_setpoint();
 	void		publish_rate_controller_status();
 
+        /*   --------- Raffaele ---------------------------------*/
+        bool            vehicle_attitude_local_true_poll(); // added
+        void            vehicle_attitude_local_poll(); //added
+        void            experiment_mode_poll();
+        /* -----------------------------------------------------*/
+
 	float		throttle_curve(float throttle_stick_input);
 
 	/**
@@ -148,7 +161,47 @@ private:
 	 */
 	matrix::Vector3f pid_attenuations(float tpa_breakpoint, float tpa_rate);
 
+        /* ---------- Raffaele -------------------*/
+
+        /**
+	 * Attitude controller LQR.
+	 */
+	//void		control_LQR(Matrix<float,4,12> K, Matrix<float,12,12> P);
+
+        /**
+	 * Attitude controller LQR plus integrator
+	 */
+//	void		control_LQR_int(Matrix<float,4,16> K, Matrix<float,16,16>,float dt);
+
+        /**
+	 * Reset LQR integrator
+	 */
+//	void		reset_int();
+
+        /**
+	 * Set Reference inputs integrator
+	 */
+//	void		set_ref_inputs();
+
+        /**
+	 * Set equilibrium point
+	 */
+//	void		set_state_eq();
+
+        /**
+	 * Set equilibrium point
+	 */
+//	void		set_state_eq_int();
+
+        /* -----------------------------------------*/
+
 	AttitudeControl _attitude_control; /**< class for attitude control calculations */
+
+       /* ------------ Raffaele ---------- */
+        QuadrotorLQRControl _LQRcontrol;   /* class for LQR control */
+        //Observer _Observer;
+       /* ------------------------------- */
+
 
 	int		_v_att_sub{-1};			/**< vehicle attitude subscription */
 	int		_v_att_sp_sub{-1};		/**< vehicle attitude setpoint subscription */
@@ -164,6 +217,16 @@ private:
 	int		_sensor_bias_sub{-1};		/**< sensor in-run bias correction subscription */
 	int		_vehicle_land_detected_sub{-1};	/**< vehicle land detected subscription */
 	int		_landing_gear_sub{-1};
+
+        /* ------------- Raffaele -------------------------*/
+        int             _experiment_mode_sub{-1};   // experiment mode subscriber
+       // int             _experiment_mode_detected{0};   /**< detect experiment mode when it's up*/
+        int             local_pos_sub {-1};         // local position
+        int             local_pos_true_sub{-1};     // local position grounthruth 
+        int             _v_att_true_sub{-1};        // attitude groundthruth
+        
+        /*--------------------------------------------------*/
+
 
 	unsigned _gyro_count{1};
 	int _selected_gyro{0};
@@ -192,6 +255,13 @@ private:
 	struct sensor_bias_s			_sensor_bias {};	/**< sensor in-run bias corrections */
 	struct vehicle_land_detected_s		_vehicle_land_detected {};
 	struct landing_gear_s 			_landing_gear {};
+        /* --------- Raffaele --------------------*/
+        struct experiment_mode_s                experiment_mode {};  
+        struct vehicle_local_position_s  _v_local_true_pos; // ++ struct local_position
+        struct vehicle_attitude_s  _v_true_att {};		/**< vehicle attitude */
+        struct vehicle_local_position_s  _v_local_pos; // ++ struct local_position
+        /* ----------------------------------------*/
+
 
 	MultirotorMixer::saturation_status _saturation_status{};
 
@@ -289,6 +359,13 @@ private:
 
 	matrix::Vector3f _acro_rate_max;	/**< max attitude rates in acro mode */
 	float _man_tilt_max;			/**< maximum tilt allowed for manual flight [rad] */
+
+        /* ----------Raffaele-----------------------*/
+        Matrix<float,12,1> state_eq;            /**< dynamic equilibrium point*/
+        Matrix<float,16,1> state_eq_int;            /**< dynamic equilibrium point*/
+        Matrix<float, 4,1> state_int;           /**< state space integrator */
+        Matrix<float, 4,1> reference_inputs;     /**< reference inputs: x - y - z - psi */
+        /* ------------------------------------------*/
 
 };
 

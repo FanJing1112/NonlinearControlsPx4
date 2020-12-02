@@ -99,6 +99,7 @@
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/vehicle_status_flags.h>
 #include <uORB/topics/vtol_vehicle_status.h>
+#include <uORB/topics/experiment_mode.h>
 
 typedef enum VEHICLE_MODE_FLAG {
 	VEHICLE_MODE_FLAG_CUSTOM_MODE_ENABLED = 1, /* 0b00000001 Reserved for future use. | */
@@ -146,6 +147,8 @@ static struct vehicle_control_mode_s control_mode = {};
 static struct offboard_control_mode_s offboard_control_mode = {};
 static int32_t _flight_mode_slots[manual_control_setpoint_s::MODE_SLOT_MAX];
 static struct commander_state_s internal_state = {};
+static struct experiment_mode_s exp_mode = {};
+static orb_advert_t exp_mode_pub;
 
 static uint8_t main_state_before_rtl = commander_state_s::MAIN_STATE_MAX;
 
@@ -508,6 +511,41 @@ int commander_main(int argc, char *argv[])
 
 		return (ret ? 0 : 1);
 	}
+	if (!strcmp(argv[1], "experiment")) {
+    	bool ret = 1;
+        if (argc < 3) {
+			usage("not enough arguments, missing [on, off]");
+			return 1;
+	   	}
+	         
+		/* see if we got a home position */
+		if (status_flags.condition_local_position_valid) {
+
+			if (TRANSITION_DENIED != arm_disarm(true, &mavlink_log_pub, "command line")) {
+	
+	            exp_mode.timestamp = hrt_absolute_time();
+             	if(!strcmp(argv[2], "on")){ 
+	            	exp_mode.experiment_on = true;
+	                //ret = send_vehicle_command(vehicle_command_s::VEHICLE_CMD_NAV_TAKEOFF);VEHICLE_CMD_DO_ORBIT
+	                PX4_INFO("experiment controller ON.\n");
+	            }
+             	else if(!strcmp(argv[2], "off")){
+	         		exp_mode.experiment_on = false;
+	             	ret = send_vehicle_command(vehicle_command_s::VEHICLE_CMD_NAV_LAND);
+	             	PX4_INFO("experiment controller OFF.\n");
+	            }
+			} else {
+				PX4_ERR("arming failed");                  
+			}
+
+		} else {
+			PX4_ERR("rejecting experiment mode, no position lock yet. Please retry..");
+		}
+             
+       	// Send a message to the controller
+	   	orb_publish(ORB_ID(experiment_mode), exp_mode_pub, &exp_mode);
+	   	return (ret ? 0 : 1);   
+    }	
 
 	usage("unrecognized command");
 	return 1;
@@ -1250,6 +1288,10 @@ Commander::run()
 
 	/* publish initial state */
 	_status_pub = orb_advertise(ORB_ID(vehicle_status), &status);
+
+	//Joe
+	exp_mode.experiment_on = false;
+	exp_mode_pub = orb_advertise(ORB_ID(experiment_mode),&exp_mode);
 
 	/* armed topic */
 	orb_advert_t armed_pub = orb_advertise(ORB_ID(actuator_armed), &armed);

@@ -52,6 +52,25 @@
 #include <mathlib/math/Limits.hpp>
 #include <mathlib/math/Functions.hpp>
 
+/* ----------------- Raffaele -----------------------*/
+#include <fstream>
+#include <string>
+#include <array>
+#include <vector>
+#include <iostream>
+#include <cmath>
+#include <memory>
+
+#include <uORB/topics/experiment_mode.h>
+#include <uORB/topics/vehicle_local_position.h>
+
+
+using namespace matrix;
+using namespace std;
+static bool exp_controller_on = false;
+/*----------------------------------------------------- */
+
+
 #define TPA_RATE_LOWER_LIMIT 0.05f
 
 #define AXIS_INDEX_ROLL 0
@@ -370,6 +389,94 @@ MulticopterAttitudeControl::landing_gear_state_poll()
 	}
 }
 
+/* ------------ Raffaele -----------------------*/
+
+// This method reads if experiment_mode is on
+void MulticopterAttitudeControl::experiment_mode_poll()
+{
+	/* check if there is a new message */
+	bool updated;
+	orb_check(_experiment_mode_sub, &updated);
+
+	if (updated) {
+		orb_copy(ORB_ID(experiment_mode), _experiment_mode_sub, &experiment_mode);
+                if(experiment_mode.experiment_on){
+                   PX4_INFO("experiment topic is ON!!!\n");
+                   exp_controller_on = true;
+                }
+                else{
+                   PX4_INFO("experiment topic is off !!!\n");
+                   exp_controller_on = false;
+                }
+	}
+}
+
+
+/* 
+  update vehicle attitude and local position at the same time with the true states from the simulator
+*/
+
+// This method reads the local position and attitude from the EKF
+void MulticopterAttitudeControl::vehicle_attitude_local_poll()
+{
+	/* check if there is a new message */
+	bool updated_a;
+
+	bool updated_p;
+
+        orb_check(_v_att_sub, &updated_a);
+        orb_check(local_pos_sub, &updated_p);
+        
+	if (updated_a && updated_p) {
+                
+		uint8_t prev_quat_reset_counter = _v_att.quat_reset_counter;
+
+		orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
+                orb_copy(ORB_ID(vehicle_local_position), local_pos_sub, &_v_local_pos);
+		// Check for a heading reset
+		if (prev_quat_reset_counter != _v_att.quat_reset_counter) {
+			// we only extract the heading change from the delta quaternion
+			_man_yaw_sp += Eulerf(Quatf(_v_att.delta_q_reset)).psi();
+		}
+	        return;       
+	}
+        return;
+        
+}
+
+// This method reads the true local position and attitude
+bool MulticopterAttitudeControl::vehicle_attitude_local_true_poll()
+{
+	/* check if there is a new message */
+	bool updated_a;
+	bool updated_p;
+        bool updated = false;
+        orb_check(_v_att_true_sub, &updated_a);
+        orb_check(local_pos_true_sub, &updated_p);
+        
+	if (updated_a && updated_p) {
+               updated = true;
+		uint8_t prev_quat_reset_counter = _v_true_att.quat_reset_counter;
+                
+		orb_copy(ORB_ID(vehicle_attitude_groundtruth), _v_att_true_sub, &_v_true_att);
+                orb_copy(ORB_ID(vehicle_local_position_groundtruth), local_pos_true_sub, &_v_local_true_pos);
+                _v_local_true_pos.z = -_v_local_true_pos.z; 
+                // Check for a heading reset
+		if (prev_quat_reset_counter != _v_true_att.quat_reset_counter) {
+			// we only extract the heading change from the delta quaternion
+			_man_yaw_sp += Eulerf(Quatf(_v_true_att.delta_q_reset)).psi();
+		}
+	        return updated;       
+	}
+        return updated;
+        
+}
+/* ------------------------------------------------------------------------ */
+
+
+
+
+
 float
 MulticopterAttitudeControl::throttle_curve(float throttle_stick_input)
 {
@@ -521,7 +628,7 @@ MulticopterAttitudeControl::control_attitude()
 {
 	vehicle_attitude_setpoint_poll();
 
-	// reinitialize the setpoint while not armed to make sure no value from the last mode or flight is still kept
+	// reinitialize the setpoint while not armed to make sure no value from the last flight is still kept
 	if (!_v_control_mode.flag_armed) {
 		Quatf().copyTo(_v_att_sp.q_d);
 		Vector3f().copyTo(_v_att_sp.thrust_body);
@@ -644,17 +751,8 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 
 			}
 
-			// I term factor: reduce the I gain with increasing rate error.
-			// This counteracts a non-linear effect where the integral builds up quickly upon a large setpoint
-			// change (noticeable in a bounce-back effect after a flip).
-			// The formula leads to a gradual decrease w/o steps, while only affecting the cases where it should:
-			// with the parameter set to 400 degrees, up to 100 deg rate error, i_factor is almost 1 (having no effect),
-			// and up to 200 deg error leads to <25% reduction of I.
-			float i_factor = rates_err(i) / math::radians(400.f);
-			i_factor = math::max(0.0f, 1.f - i_factor * i_factor);
-
 			// Perform the integration using a first order method and do not propagate the result if out of range or invalid
-			float rate_i = _rates_int(i) + i_factor * rates_i_scaled(i) * rates_err(i) * dt;
+			float rate_i = _rates_int(i) + rates_i_scaled(i) * rates_err(i) * dt;
 
 			if (PX4_ISFINITE(rate_i) && rate_i > -_rate_int_lim(i) && rate_i < _rate_int_lim(i)) {
 				_rates_int(i) = rate_i;
@@ -737,6 +835,17 @@ MulticopterAttitudeControl::run()
 	_motor_limits_sub = orb_subscribe(ORB_ID(multirotor_motor_limits));
 	_battery_status_sub = orb_subscribe(ORB_ID(battery_status));
 
+        /* ------ Raffaele ----------*/
+        _experiment_mode_sub = orb_subscribe(ORB_ID(experiment_mode));  //experiment mode        
+        local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));  //local position
+        
+        _v_att_true_sub = orb_subscribe(ORB_ID(vehicle_attitude_groundtruth));           //true attitude from the simulator       
+        local_pos_true_sub = orb_subscribe(ORB_ID(vehicle_local_position_groundtruth));  //true position from the simulator
+ 
+         //static bool updates_estimation = false;
+        /* ------------------------------------ */
+         
+
 	_gyro_count = math::constrain(orb_group_count(ORB_ID(sensor_gyro)), 1, MAX_GYRO_COUNT);
 
 	for (unsigned s = 0; s < _gyro_count; s++) {
@@ -754,14 +863,15 @@ MulticopterAttitudeControl::run()
 
 	const hrt_abstime task_start = hrt_absolute_time();
 	hrt_abstime last_run = task_start;
+        // hrt_abstime last_run_1 = task_start;
 	float dt_accumulator = 0.f;
 	int loop_counter = 0;
 
 	bool reset_yaw_sp = true;
-	float attitude_dt = 0.f;
+	float attitude_dt = 0.0f;
 
 	while (!should_exit()) {
-
+		bool landing = false;
 		// check if the selected gyro has updated first
 		sensor_correction_poll();
 		poll_fds.fd = _sensor_gyro_sub[_selected_gyro];
@@ -785,34 +895,84 @@ MulticopterAttitudeControl::run()
 		perf_begin(_loop_perf);
 
 		/* run controller on gyro changes */
-		if (poll_fds.revents & POLLIN) {
-			const hrt_abstime now = hrt_absolute_time();
-
-			// Guard against too small (< 0.2ms) and too large (> 20ms) dt's.
+               
+		if (poll_fds.revents & POLLIN) { // dt>0.002f poll_fds.revents & POLLIN
+			
+                        const hrt_abstime now = hrt_absolute_time();
+                        //Guard against too small (< 0.2ms) and too large (> 20ms) dt's.
 			const float dt = math::constrain(((now - last_run) / 1e6f), 0.0002f, 0.02f);
 			last_run = now;
-
+                        
 			/* copy gyro data */
 			orb_copy(ORB_ID(sensor_gyro), _sensor_gyro_sub[_selected_gyro], &_sensor_gyro);
 
 			/* run the rate controller immediately after a gyro update */
 			if (_v_control_mode.flag_control_rates_enabled) {
-				control_attitude_rates(dt);
+			   	 
+                            /* +  LQR Control if experiment_mode is On +*/
+                           if (experiment_mode.experiment_on){
+                                 static Matrix<float,4,1> _u_control_n;
+                                 _LQRcontrol.setCurrentState(_v_att, _v_local_pos);
+                                  
+                                     _u_control_n = _LQRcontrol.LQRcontrol();                        // LQR Control
+                                 
+                                 // Prepare control inputs for publication
+                                     _thrust_sp = _u_control_n(0,0);
+                                     _att_control(0) = _u_control_n(1,0);
+                                     _att_control(1) = _u_control_n(2,0);
+                                     _att_control(2) = _u_control_n(3,0);
+                                
 
-				publish_actuator_controls();
-				publish_rate_controller_status();
+                                
+                                
+                                publish_actuator_controls();
+                                
+                                landing = true;
+                                if (!experiment_mode.experiment_on && landing == true)
+                                {
+                                    static Matrix<float,12,1> eq_point;             //new equilibrium point for landing
+                                    for(int i=0;i<12;i++){
+                                        eq_point(i,0)=0.0f;    
+                                    }
+                                    eq_point(5,0)=0.1f;                             // z = -0.1 m for landing
+                                    _LQRcontrol.setEquilibriumPoint(eq_point);
+                                }
+                            }else {
+                                
+                                  if (landing==false){           // PID Control
+                                     control_attitude_rates(dt);
+                                     publish_rate_controller_status();
+                                     publish_actuator_controls();                                                              
+                            }}
+
 			}
-
-			/* check for updates in other topics */
+                         /* Checking updates */
+                        bool attitude_updated = false;
+                        if (experiment_mode.experiment_on || landing == true){                               
+                                   //updates_estimation = vehicle_attitude_local_true_poll();       // check true position and attitude updates 
+                                   vehicle_attitude_local_poll();                 
+                            }else {
+                                  attitude_updated = vehicle_attitude_poll();                                                             
+                            }
+                        /* check if experiment mode has changed*/
+                        if (!experiment_mode.experiment_on && _LQRcontrol.getAutoEqPointFlag() == false)
+                        {
+                             _LQRcontrol.setAutoEqPointFlag(true); //  auto equilibrium point is again availble
+                         }
+                         
+                        /*---------------------------------------*/
+			
+                        /* check for updates in other topics */
 			vehicle_control_mode_poll();
 			vehicle_status_poll();
 			vehicle_motor_limits_poll();
 			battery_status_poll();
+                        experiment_mode_poll();
 			sensor_bias_poll();
 			vehicle_land_detected_poll();
 			landing_gear_state_poll();
 			const bool manual_control_updated = vehicle_manual_poll();
-			const bool attitude_updated = vehicle_attitude_poll();
+			//const bool attitude_updated = vehicle_attitude_poll();        // I had to comment this line see line 914
 			attitude_dt += dt;
 
 			/* Check if we are in rattitude mode and the pilot is above the threshold on pitch
@@ -844,9 +1004,12 @@ MulticopterAttitudeControl::run()
 						generate_attitude_setpoint(attitude_dt, reset_yaw_sp);
 						attitude_setpoint_generated = true;
 					}
-
-					control_attitude();
-					publish_rates_setpoint();
+                                        /*----- Raffaele ------------*/
+                                        if(!experiment_mode.experiment_on){
+                                           control_attitude();          // Use control attitude for the rates publication only if not in experiment mode
+                                           publish_rates_setpoint();
+                                        }
+					/*---------------------------*/
 				}
 
 			} else {
@@ -923,8 +1086,11 @@ MulticopterAttitudeControl::run()
 	orb_unsubscribe(_vehicle_status_sub);
 	orb_unsubscribe(_motor_limits_sub);
 	orb_unsubscribe(_battery_status_sub);
-
-	for (unsigned s = 0; s < _gyro_count; s++) {
+        /*-------Raffaele----------------*/
+        orb_unsubscribe(local_pos_sub); // 
+        orb_unsubscribe(_experiment_mode_sub); // 
+	/*-------------------------------*/
+        for (unsigned s = 0; s < _gyro_count; s++) {
 		orb_unsubscribe(_sensor_gyro_sub[s]);
 	}
 

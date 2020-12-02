@@ -41,6 +41,7 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		mc_att_control_main.cpp
+                QuadrotorLQRControl.cpp
 	DEPENDS
 		circuit_breaker
 		conversion
