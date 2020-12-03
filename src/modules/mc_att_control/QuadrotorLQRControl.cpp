@@ -69,9 +69,9 @@ QuadrotorLQRControl::QuadrotorLQRControl()
 
    // ----- Changes for Feedback Linearization---
 
-   _init_time = hrt_absolute_time() * 1e-6;
+   _init_time = 0;
    eta = 0;
-   zeta = 0;
+   zeta = 9.8*0.8;
    u_bar1 = 0;
    // -------------------------------------------
 
@@ -107,7 +107,7 @@ Matrix <double, 4, 14>  QuadrotorLQRControl::readMatrixK(const char *filename)
 
 Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
 {  
-     
+
      //static Matrix<float,4,1> u_control;
      static Matrix<float,4,1> u_control_norm;
      static Matrix<float,12,1> delta_x;
@@ -117,16 +117,19 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
      const hrt_abstime now = hrt_absolute_time();
 
     float _current_time = now *1e-6;
-    float dt = _current_time-_past_time;
+    float dt = _current_time-_past_time; // POSSIBLY CHECK IF THIS IS TOO BIG
+    if(abs((double)_init_time) <  0.01){
+      _init_time = _current_time;
+     }
     float t = _current_time - _init_time;
      
     _past_time = _current_time;
-
+    
     // HERE IS WHERE I WILL IMPLEMENT THE CONTROL
 
-    // Update the control terms:
-    zeta = zeta + eta*dt + 0.5f*u_bar1*dt*dt;
-    eta = eta + u_bar1*dt;
+    // Update the control terms: // THIS INTEGRATION SCHEME COULD BE A PROBLEM
+    zeta = zeta + eta*dt; //+ 0.5f*u_bar1*dt*dt;
+    eta = eta + u_bar1*dt*0.001f;
 
     //get the reference Z values and accels;
     double des_state[14];
@@ -155,25 +158,48 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
     for(int i=0;i<14;i++){
       current_z(i,0) = z[i];
     }
+    cout << "Time: " << t << endl;
     //get the linearized control law to apply
+    cout << "Current Z: " << endl;
+    for(int i=0; i < 14; i++){
+      cout << current_z(i,0) << " ";
+    }
+    cout << "-------------" << endl;
+
+    cout << "Desired Z: " << endl;
+    for(int i=0; i < 14; i++){
+      cout << des_z(i,0) << " ";
+    }
+    cout << "-------------" << endl;
+
+    cout << "Forward Acceleration: " << endl;
+    for(int i=0; i < 4; i++){
+      cout << forward_acc(i,0) << " ";
+    }
+    cout << "-------------" << endl;
+
     Matrix<double,14,1> delta_z = des_z - current_z;
     Matrix<double,4,1> v = forward_acc + _K*(delta_z);
-
+    //cout << "Error Matrix: " << delta_z(0,0) << ", " << delta_z(1,0) << ", " << delta_z(2,0) << ", " << delta_z(3,0) << ", " << endl;
     double v_arr[4];
     for(int i=0;i<4;i++){
       v_arr[i] = v(i,0);
+      cout << v_arr[i] << " ";
     }
+    cout << endl << "-----------" << endl;
 
     //get the non-linearized control to apply
     double u_bar[4];
+    // cout << u_bar[0] << " " << u_bar[1] << " " << u_bar[2] << " " << u_bar[3] << endl;
     calc_feedback_linearization(states, v_arr, params, u_bar);
 
     // put the control into the control array:
-    u_control(1,0) = (float)(u_bar[1]);
+    u_control(1,0) = (float)(u_bar[3]);
     u_control(2,0) = (float)(u_bar[2]);
-    u_control(3,0) = (float)(u_bar[3]);
+    u_control(3,0) = (float)(u_bar[1]);
     u_control(0,0) = zeta;
     u_bar1 = u_bar[0];
+    // cout << "u_bar: " << u_bar1 << endl;
 
     v_b = delta_x_T*_P;
     _lyap_fun = v_b*delta_x;
