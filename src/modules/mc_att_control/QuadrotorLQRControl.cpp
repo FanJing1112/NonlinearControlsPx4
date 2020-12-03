@@ -67,6 +67,8 @@ ofstream outfile4;
 
      _past_time = hrt_absolute_time() * 1e-6;
 
+     _init_time = 0;
+
 }
 
 
@@ -108,12 +110,31 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
      const hrt_abstime now = hrt_absolute_time();
 
      float _current_time = now *1e-6;
+     if(abs(_init_time) < 0.01f){
+      _init_time = _current_time;
+     }
+     float t = _current_time - _init_time;
     // float dt = _current_time-_past_time;
      
     _past_time = _current_time;
 
-    delta_x   = _current_state - _eq_point;    
+    Matrix<float,12,1> ref_state;
+    ref_state(0,0) = -1.0f*sin(t);
+    ref_state(1,0) = cos(t);
+    ref_state(2,0) = cos(t);
+    ref_state(3,0) = sin(t);
+    ref_state(4,0) = -1.0f/(2.0f*sqrt(t+0.1f));
+    ref_state(5,0) = -1.0f*sqrt(t+0.1f);
+    ref_state(10,0) = cos(t+0.1f)/(t+0.1f)-sin(t+0.1f)/((t+0.1f)*(t+0.1f));
+    ref_state(11,0) = sin(t+0.1f)/(t+0.1f);
+    ref_state(6,0) = 0;
+    ref_state(7,0) = 0;
+    ref_state(8,0) = 0;
+    ref_state(9,0) = 0;
+
+    delta_x   = _current_state - ref_state;    
     u_control = - _K*(delta_x); 
+    u_control(0,0) = u_control(0,0) + 0.8f*9.8f;
  
     delta_x_T = delta_x.transpose();
     
@@ -122,7 +143,7 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
     //cout<< dt << "\t" << _P(0,0) << "\n";
    // !! IMPORTANT scale the control inputs.......
     float torque_scaling = 0.1650f*8.0f*4.0f;
-    float force_scaling = 16.0f;
+    float force_scaling = 32.0f;
 
 
     u_control_norm(1,0) = fmin(fmax((u_control(1,0))/(torque_scaling), -1.0f), 1.0f);  
@@ -139,7 +160,7 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
     //"\t" <<  u_control(0,0)+ff_thrust << "\n";
          /* Save data*/
     writeStateOnFile("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/state.txt", _current_state, now);
-    writeInputOnFile("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/control_input.txt", u_control_norm, now); 
+    writeInputOnFile("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/control_input.txt", u_control, now); 
     writeLyapunovOnFile("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/lyapunov.txt", _lyap_fun(0,0), now); 
     writeStateOnFile("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/ekf.txt", _current_state_ekf, now);
     

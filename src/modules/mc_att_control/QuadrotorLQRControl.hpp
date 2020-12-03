@@ -90,6 +90,8 @@ private:
       float _past_time;
 
       Matrix<float,4,1> u_control;
+
+      float _init_time;
       
 
 };
