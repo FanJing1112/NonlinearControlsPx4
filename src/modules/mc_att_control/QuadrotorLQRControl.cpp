@@ -129,7 +129,7 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
 
     // Update the control terms: // THIS INTEGRATION SCHEME COULD BE A PROBLEM
     zeta = zeta + eta*dt; //+ 0.5f*u_bar1*dt*dt;
-    eta = eta + u_bar1*dt*0.001f;
+    eta = eta + u_bar1*dt;
 
     //get the reference Z values and accels;
     double des_state[14];
@@ -206,7 +206,7 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
     //cout<< dt << "\t" << _P(0,0) << "\n";
    // !! IMPORTANT scale the control inputs.......
     float torque_scaling = 0.1650f*8.0f*4.0f;
-    float force_scaling = 16.0f;
+    float force_scaling = 32.0f;
 
 
     u_control_norm(1,0) = fmin(fmax((u_control(1,0))/(torque_scaling), -1.0f), 1.0f);  
@@ -223,7 +223,7 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
     //"\t" <<  u_control(0,0)+ff_thrust << "\n";
          /* Save data*/
     writeStateOnFile("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/state.txt", _current_state, now);
-    writeInputOnFile("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/control_input.txt", u_control_norm, now); 
+    writeInputOnFile("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/control_input.txt", u_control, now); 
     writeLyapunovOnFile("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/lyapunov.txt", _lyap_fun(0,0), now); 
     writeStateOnFile("/home/joe/NonlinearControls/Firmware/src/modules/mc_att_control/output_files/ekf.txt", _current_state_ekf, now);
     
