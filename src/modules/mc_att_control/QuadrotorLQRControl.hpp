@@ -107,7 +107,7 @@ private:
 
       static double rt_powd_snf(double u0, double u1);
 
-      void get_reference_z(double t, double des_state[14], double des_accel[4]);
+      void get_reference_z(double t, double radius, double des_state[14], double des_accel[4]);
 
 
       // -------------------------------------------------------------------

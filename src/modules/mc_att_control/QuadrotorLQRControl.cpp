@@ -134,7 +134,7 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
     //get the reference Z values and accels;
     double des_state[14];
     double des_accel[4];
-    get_reference_z(t,des_state,des_accel);
+    get_reference_z(t, 1.0, des_state,des_accel);
 
     Matrix<double,14,1> des_z;
     for(int i=0;i<14;i++){
@@ -151,32 +151,49 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
                           _current_state(0,0), _current_state(2,0), _current_state(4,0), 
                           zeta, eta, 
                           _current_state(10,0),_current_state(8,0), _current_state(6,0)};
-    double params[5] = {0.05, 0.05, 0.09, 0.8, 9.8};
+
+
+
+
+
+
+
+    double error_ratio = 1.0;
+
+
+
+
+
+
+    double params[5] = {0.05*error_ratio, 0.05*error_ratio, 0.09, 0.8, 9.8};
     double z[14];
     calc_z(states,params,z);
     Matrix<double,14,1> current_z;
     for(int i=0;i<14;i++){
       current_z(i,0) = z[i];
     }
-    cout << "Time: " << t << endl;
-    //get the linearized control law to apply
-    cout << "Current Z: " << endl;
-    for(int i=0; i < 14; i++){
-      cout << current_z(i,0) << " ";
+    if(t > 25){
+      cout << "END THE EXPERIMENT" << endl;
     }
-    cout << "-------------" << endl;
+    // cout << "Time: " << t << endl;
+    // //get the linearized control law to apply
+    // cout << "Current Z: " << endl;
+    // for(int i=0; i < 14; i++){
+    //   cout << current_z(i,0) << " ";
+    // }
+    // cout << "-------------" << endl;
 
-    cout << "Desired Z: " << endl;
-    for(int i=0; i < 14; i++){
-      cout << des_z(i,0) << " ";
-    }
-    cout << "-------------" << endl;
+    // cout << "Desired Z: " << endl;
+    // for(int i=0; i < 14; i++){
+    //   cout << des_z(i,0) << " ";
+    // }
+    // cout << "-------------" << endl;
 
-    cout << "Forward Acceleration: " << endl;
-    for(int i=0; i < 4; i++){
-      cout << forward_acc(i,0) << " ";
-    }
-    cout << "-------------" << endl;
+    // cout << "Forward Acceleration: " << endl;
+    // for(int i=0; i < 4; i++){
+    //   cout << forward_acc(i,0) << " ";
+    // }
+    // cout << "-------------" << endl;
 
     Matrix<double,14,1> delta_z = des_z - current_z;
     Matrix<double,4,1> v = forward_acc + _K*(delta_z);
@@ -184,9 +201,9 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
     double v_arr[4];
     for(int i=0;i<4;i++){
       v_arr[i] = v(i,0);
-      cout << v_arr[i] << " ";
+      // cout << v_arr[i] << " ";
     }
-    cout << endl << "-----------" << endl;
+    // cout << endl << "-----------" << endl;
 
     //get the non-linearized control to apply
     double u_bar[4];
@@ -215,9 +232,9 @@ Matrix<float,4,1> QuadrotorLQRControl::LQRcontrol()
     u_control_norm(0,0) = fmin(fmax((u_control(0,0)+ff_thrust)/force_scaling, 0.0f), 1.0f);
 
    // not normalized control inputs
-     u_control(0,0) = u_control_norm(0,0)*16.0f;
-     u_control(1,0) = u_control_norm(1,0)*4.0f;
-     u_control(2,0) = u_control_norm(2,0)*4.0f;
+     u_control(0,0) = u_control_norm(0,0)*force_scaling;
+     u_control(1,0) = u_control_norm(1,0)*torque_scaling;
+     u_control(2,0) = u_control_norm(2,0)*torque_scaling;
      u_control(3,0) = u_control_norm(3,0)*0.05f;
      
     //"\t" <<  u_control(0,0)+ff_thrust << "\n";
@@ -683,40 +700,42 @@ double QuadrotorLQRControl::rt_powd_snf(double u0, double u1)
   return y;
 }
 
-void QuadrotorLQRControl::get_reference_z(double t, double des_state[14], double des_accel[4])
+void QuadrotorLQRControl::get_reference_z(double t, double radius, double des_state[14], double des_accel[4])
 {
-  double des_psi_tmp;
-  double des_psidot_tmp;
   double des_state_tmp;
   double des_x_tmp;
   double des_xdot_tmp;
   des_x_tmp = std::cos(t);
   des_xdot_tmp = std::sin(t);
-  des_psi_tmp = std::sin(t + 0.1);
-  des_psidot_tmp = std::cos(t + 0.1);
+  
+  //  des_z = -sqrt(t+0.5); des_zdot = -1/(2*(t + 5/10)^(1/2)); des_zdot2 = 1/(4*(t + 5/10)^(3/2));  
+  //  des_zdot3 = -3/(8*(t + 0.5)^(5/2));des_zdot4 = 15/(16*(t + 0.5)^(7/2));
+  //  des_psi = sin(t+0.1)/(t+0.1); des_psidot = cos(t + 1/10)/(t + 1/10) - sin(t + 1/10)/(t + 1/10)^2; 
+  //  des_psidot2 = (2*sin(t + 1/10))/(t + 1/10)^3 - sin(t + 1/10)/(t + 1/10) - (2*cos(t + 1/10))/(t + 1/10)^2;  
   //  des_state = [des_xdot;des_x;des_ydot;des_y;des_zdot;des_z;0;0;0;0;des_psidot;des_psi]; 
   // simplified state
-  des_state[0] = des_x_tmp;
-  des_state[1] = -des_xdot_tmp;
-  des_state[2] = -des_x_tmp;
-  des_state[3] = des_xdot_tmp;
-  des_state[4] = des_xdot_tmp;
-  des_state[5] = des_x_tmp;
-  des_state[6] = -std::sin(t);
-  des_state[7] = -std::cos(t);
+  des_state[0] = radius * des_x_tmp;
+  des_state[1] = -radius * des_xdot_tmp;
+  des_state[2] = -radius * des_x_tmp;
+  des_state[3] = radius * des_xdot_tmp;
+  des_x_tmp = radius * std::sin(t);
+  des_state[4] = des_x_tmp;
+  des_xdot_tmp = radius * std::cos(t);
+  des_state[5] = des_xdot_tmp;
+  des_state[6] = -radius * std::sin(t);
+  des_state[7] = -radius * std::cos(t);
   des_state_tmp = std::sqrt(t + 0.1);
   des_state[8] = -des_state_tmp;
   des_state[9] = -1.0 / (2.0 * des_state_tmp);
   des_state[10] = 1.0 / (4.0 * rt_powd_snf(t + 0.1, 1.5));
   des_state[11] = -3.0 / (8.0 * rt_powd_snf(t + 0.1, 2.5));
-  des_state[12] = des_psi_tmp / (t + 0.1);
-  des_state_tmp = (t + 0.1) * (t + 0.1);
-  des_state[13] = des_psidot_tmp / (t + 0.1) - des_psi_tmp / des_state_tmp;
-  des_accel[0] = des_x_tmp;
-  des_accel[1] = des_xdot_tmp;
+  des_state[12] = t;
+  des_state[13] = 1.0;
+  des_accel[0] = des_xdot_tmp;
+  des_accel[1] = des_x_tmp;
   des_accel[2] = 15.0 / (16.0 * rt_powd_snf(t + 0.1, 3.5));
-  des_accel[3] = (2.0 * des_psi_tmp / rt_powd_snf(t + 0.1, 3.0) - std::sin(t +
-    0.1) / (t + 0.1)) - 2.0 * des_psidot_tmp / des_state_tmp;
+  des_accel[3] = 0.0;
 }
+
 
 
